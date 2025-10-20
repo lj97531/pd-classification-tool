@@ -149,19 +149,20 @@ Respond in valid JSON format:
     try {
       const apiKey = process.env.NEXT_PUBLIC_BLACKBOX_API_KEY || 'sk-yMV2eiGm9WfY74VkAvO3og';
       
-      const response = await fetch('https://llm.blackbox.ai/chat/completions', {
+      const response = await fetch('https://api.blackbox.ai/v1/chat/completions', {
         method: 'POST',
         headers:  {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'openrouter/claude-sonnet-4',
+          model: 'blackboxai',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Classify this patient case using the PTNM system:\n\n${caseDescription}` }
           ],
-          temperature: 0.3
+          temperature: 0.3,
+          max_tokens: 2000
         })
       });
 
