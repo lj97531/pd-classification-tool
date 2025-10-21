@@ -149,40 +149,72 @@ Respond in valid JSON format:
     try {
       const apiKey = process.env.NEXT_PUBLIC_BLACKBOX_API_KEY || 'sk-yMV2eiGm9WfY74VkAvO3og';
       
-      const response = await fetch('https://api.blackbox.ai/v1/chat/completions', {
+      console.log('Sending request to Blackbox AI...');
+      console.log('Case description:', caseDescription);
+      
+      const response = await fetch('https://api.blackbox.ai/api/chat', {
         method: 'POST',
         headers:  {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'blackboxai',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Classify this patient case using the PTNM system:\n\n${caseDescription}` }
           ],
-          temperature: 0.3,
-          max_tokens: 2000
+          previewToken: null,
+          userId: apiKey,
+          codeModelMode: true,
+          agentMode: {},
+          trendingAgentMode: {},
+          isMicMode: false,
+          userSystemPrompt: null,
+          maxTokens: 2000,
+          playgroundTopP: 0.9,
+          playgroundTemperature: 0.3,
+          isChromeExt: false,
+          githubToken: null,
+          clickedAnswer2: false,
+          clickedAnswer3: false,
+          clickedForceWebSearch: false,
+          visitFromDelta: false,
+          mobileClient: false
         })
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error('Classification request failed');
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`API request failed with status ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('API Response:', data);
+      
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error('Invalid API response structure:', data);
+        throw new Error('Invalid API response structure');
+      }
+      
       const content = data.choices[0].message.content;
+      console.log('AI Response content:', content);
       
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('Invalid response format');
+        console.error('No JSON found in response:', content);
+        throw new Error('Invalid response format - no JSON found');
       }
       
       const result: ClassificationResult = JSON.parse(jsonMatch[0]);
+      console.log('Parsed classification:', result);
       setClassification(result);
     } catch (err) {
-      setError('Failed to classify case. Please try again.');
-      console.error(err);
+      console.error('Classification error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setError(`Failed to classify case: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
