@@ -103,113 +103,114 @@ const PTNMClassifier: React.FC = () => {
     setError('');
     setClassification(null);
 
-    const caseDescription = buildCaseDescription();
-
-    const systemPrompt = `You are a specialized urologist expert in Peyronie's disease classification using the PTNM system.
-
-PTNM Classification System:
-- P (PD Component): 0=none, Cl=classical, Ca=calcifying, P=progressive, R=relapsing/remitting, U=undifferentiated
-- T (Trauma): 0=absent, 1=present
-- N (Non-PD): 0=none, C=congenital, M=maturational, U=undifferentiated
-- M (Mode): 0=stable, 1=active, x=not applicable
-
-Key Criteria:
-- Progressive: Subjective worsening ≥3 months after onset
-- Calcifying: Moderate/severe calcification on imaging
-- Classical: Exclusion diagnosis (no other PD subtypes)
-- Relapsing/Remitting: Reactivation after ≥6 months stability
-- Congenital: Curvature since birth
-- Maturational: Curvature developing around puberty
-- Trauma-induced: Curvature following recalled trauma
-
-Stable Phase Definitions:
-- Classical PD: ≥3 months since onset
-- Nonclassical PD: EITHER ≥12 months since onset AND stable ≥3 months OR stable ≥6 months
-
-Analyze the patient case and provide:
-1. Complete PTNM classification (e.g., PClT1N0M0)
-2. Breakdown of each component with reasoning
-3. Clinical implications
-4. Treatment recommendations
-
-Respond in valid JSON format:
-{
-  "ptnm": "PClT1N0M0",
-  "breakdown": {
-    "p": "Classical PD - meets exclusion criteria, no progressive/calcifying/relapsing features",
-    "t": "Trauma present - patient recalled specific injury",
-    "n": "No congenital/maturational component",
-    "m": "Stable phase - symptoms stable for 4 months"
-  },
-  "explanation": "Detailed explanation of classification",
-  "clinicalImplications": "What this means for the patient",
-  "recommendations": "Suggested treatment approach"
-}`;
+    // Simulate processing delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_BLACKBOX_API_KEY || 'sk-yMV2eiGm9WfY74VkAvO3og';
+      // Rule-based classification logic
+      let pComponent = 'P0';
+      let tComponent = 'T0';
+      let nComponent = 'N0';
+      let mComponent = 'M0';
       
-      console.log('Sending request to Blackbox AI...');
-      console.log('Case description:', caseDescription);
+      // Determine P component
+      const hasCalcification = patientData.calcification && 
+        (patientData.calcification.includes('Moderate') || patientData.calcification.includes('Severe'));
       
-      const response = await fetch('https://api.blackbox.ai/api/chat', {
-        method: 'POST',
-        headers:  {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Classify this patient case using the PTNM system:\n\n${caseDescription}` }
-          ],
-          previewToken: null,
-          userId: apiKey,
-          codeModelMode: true,
-          agentMode: {},
-          trendingAgentMode: {},
-          isMicMode: false,
-          userSystemPrompt: null,
-          maxTokens: 2000,
-          playgroundTopP: 0.9,
-          playgroundTemperature: 0.3,
-          isChromeExt: false,
-          githubToken: null,
-          clickedAnswer2: false,
-          clickedAnswer3: false,
-          clickedForceWebSearch: false,
-          visitFromDelta: false,
-          mobileClient: false
-        })
-      });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        throw new Error(`API request failed with status ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log('API Response:', data);
+      const isProgressive = patientData.changeOverTime === 'worsened' && 
+        ['3-6 months', '6-12 months', '1-2 years', '>2 years'].includes(patientData.symptomDuration);
       
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('Invalid API response structure:', data);
-        throw new Error('Invalid API response structure');
+      const isStable = patientData.diseaseStability && 
+        ['6-12 months', '>12 months'].includes(patientData.diseaseStability);
+      
+      if (hasCalcification) {
+        pComponent = 'PCa';
+      } else if (isProgressive) {
+        pComponent = 'PP';
+      } else if (patientData.symptomDuration !== 'Since birth/puberty') {
+        pComponent = 'PCl';
       }
       
-      const content = data.choices[0].message.content;
-      console.log('AI Response content:', content);
-      
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.error('No JSON found in response:', content);
-        throw new Error('Invalid response format - no JSON found');
+      // Determine T component
+      if (patientData.trauma === 'yes') {
+        tComponent = 'T1';
       }
       
-      const result: ClassificationResult = JSON.parse(jsonMatch[0]);
-      console.log('Parsed classification:', result);
+      // Determine N component
+      if (patientData.lifelong === 'yes') {
+        if (patientData.symptomDuration === 'Since birth/puberty') {
+          nComponent = 'NC';
+        } else {
+          nComponent = 'NM';
+        }
+      }
+      
+      // Determine M component
+      const symptomMonths = patientData.symptomDuration;
+      const stabilityMonths = patientData.diseaseStability;
+      
+      if (pComponent === 'PCl') {
+        if (['3-6 months', '6-12 months', '1-2 years', '>2 years'].includes(symptomMonths)) {
+          mComponent = 'M0';
+        } else {
+          mComponent = 'M1';
+        }
+      } else {
+        if ((['1-2 years', '>2 years'].includes(symptomMonths) && ['3-6 months', '6-12 months', '>12 months'].includes(stabilityMonths)) ||
+            ['6-12 months', '>12 months'].includes(stabilityMonths)) {
+          mComponent = 'M0';
+        } else {
+          mComponent = 'M1';
+        }
+      }
+      
+      const ptnm = `${pComponent}${tComponent}${nComponent}${mComponent}`;
+      
+      // Generate detailed breakdown
+      const breakdown = {
+        p: pComponent === 'PCa' ? 'Calcifying PD - Moderate or severe plaque calcification detected' :
+           pComponent === 'PP' ? 'Progressive PD - Subjective worsening ≥3 months after onset' :
+           pComponent === 'PCl' ? 'Classical PD - Meets exclusion criteria, no progressive/calcifying/relapsing features' :
+           'No PD component identified',
+        t: tComponent === 'T1' ? 'Trauma present - Patient recalled specific penile injury' :
+           'No trauma - No recalled penile trauma',
+        n: nComponent === 'NC' ? 'Congenital - Curvature present since birth' :
+           nComponent === 'NM' ? 'Maturational - Curvature developed around puberty' :
+           'No congenital/maturational component',
+        m: mComponent === 'M0' ? 'Stable phase - Disease has been stable for sufficient duration' :
+           'Active phase - Disease still in active/changing phase'
+      };
+      
+      const explanation = `Based on the patient presentation, this case is classified as ${ptnm}. ` +
+        `The patient presents with ${patientData.curvatureDegree}-degree ${patientData.curvatureDirection} curvature ` +
+        `with ${patientData.symptomDuration} duration. ${patientData.pain === 'yes' ? 'Pain is present.' : 'No pain reported.'} ` +
+        `${patientData.trauma === 'yes' ? 'History of trauma is noted.' : 'No trauma history.'} ` +
+        `The condition has ${patientData.changeOverTime} since onset.`;
+      
+      const clinicalImplications = mComponent === 'M0' ?
+        'The stable phase indicates the disease has reached a plateau. This is the optimal time for surgical intervention if indicated. ' +
+        'Conservative management may be appropriate for mild cases.' :
+        'The active phase suggests ongoing disease progression. Conservative management with observation and medical therapy ' +
+        'is recommended. Surgical intervention should be deferred until stability is achieved.';
+      
+      const recommendations = mComponent === 'M0' ?
+        'Consider surgical correction if curvature significantly impacts function or quality of life. ' +
+        'Options include plication, grafting, or penile prosthesis depending on severity and erectile function. ' +
+        'Continue monitoring for any changes.' :
+        'Recommend conservative management including: oral pentoxifylline, vitamin E, or colchicine. ' +
+        'Consider intralesional injections (collagenase, verapamil, or interferon). ' +
+        'Vacuum erection devices and penile traction therapy may be beneficial. ' +
+        'Re-evaluate in 3-6 months for disease stability before considering surgical options.';
+      
+      const result: ClassificationResult = {
+        ptnm,
+        breakdown,
+        explanation,
+        clinicalImplications,
+        recommendations
+      };
+      
+      console.log('Generated classification:', result);
       setClassification(result);
     } catch (err) {
       console.error('Classification error:', err);
@@ -450,7 +451,7 @@ Reference: Trost et al. (2024) - Creation of a Novel Classification System (PTNM
             PTNM Classification System
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            AI-powered Peyronie's Disease classification based on evidence-based criteria
+            Peyronie's Disease classification based on evidence-based criteria
           </p>
           <p className="text-sm text-muted-foreground">
             Reference: Trost et al. (2024) - J Urol. 212(3):470-482
@@ -766,7 +767,7 @@ Reference: Trost et al. (2024) - Creation of a Novel Classification System (PTNM
               </ul>
             </div>
             <p className="text-xs pt-4 border-t">
-              This tool uses AI to assist with PTNM classification based on the research by Trost, Mulhall, and Hellstrom (2024).
+              This tool provides PTNM classification based on the research by Trost, Mulhall, and Hellstrom (2024).
               Results should be reviewed by qualified healthcare professionals and are for educational purposes only.
             </p>
           </CardContent>
